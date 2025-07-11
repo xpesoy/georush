@@ -1,0 +1,152 @@
+// backend/prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  username  String   @unique
+  password  String
+  isVerified Boolean @default(false)
+  
+  // 레이팅 시스템
+  currentRating Int @default(1000)
+  peakRating   Int @default(1000)
+  
+  // 통계
+  gamesPlayed  Int @default(0)
+  gamesWon     Int @default(0)
+  totalScore   Int @default(0)
+  perfectGuesses Int @default(0) // 50m 이내 추측
+  
+  // 타임스탬프
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // 관계
+  gameParticipants GameParticipant[]
+  roundSubmissions RoundSubmission[]
+  
+  @@map("users")
+}
+
+model Game {
+  id        String   @id @default(cuid())
+  roomId    String   @unique
+  status    GameStatus @default(WAITING)
+  
+  // 게임 설정
+  maxPlayers    Int @default(4)
+  totalRounds   Int @default(5)
+  timeLimit     Int @default(60) // 초
+  
+  // 진행 상황
+  currentRound  Int @default(0)
+  
+  // 타임스탬프
+  createdAt DateTime @default(now())
+  startedAt DateTime?
+  endedAt   DateTime?
+  
+  // 관계
+  participants GameParticipant[]
+  rounds       GameRound[]
+  
+  @@map("games")
+}
+
+model GameParticipant {
+  id       String @id @default(cuid())
+  gameId   String
+  userId   String
+  
+  // 게임 결과
+  finalRank    Int?
+  totalScore   Int @default(0)
+  ratingChange Int @default(0)
+  
+  // 상태
+  isReady   Boolean @default(false)
+  joinedAt  DateTime @default(now())
+  leftAt    DateTime?
+  
+  // 관계
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id])
+  
+  @@unique([gameId, userId])
+  @@map("game_participants")
+}
+
+model GameRound {
+  id          String @id @default(cuid())
+  gameId      String
+  roundNumber Int
+  
+  // 위치 정보
+  locationLat  Float
+  locationLng  Float
+  imageUrl     String
+  locationName String?
+  
+  // 타이밍
+  startedAt DateTime @default(now())
+  endedAt   DateTime?
+  firstSubmissionAt DateTime?
+  
+  // 관계
+  game        Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  submissions RoundSubmission[]
+  
+  @@unique([gameId, roundNumber])
+  @@map("game_rounds")
+}
+
+model RoundSubmission {
+  id      String @id @default(cuid())
+  roundId String
+  userId  String
+  
+  // 추측 정보
+  guessLat Float
+  guessLng Float
+  
+  // 결과
+  distanceMeters Int
+  score          Int
+  timeBonus      Int @default(0)
+  submissionOrder Int? // 제출 순서 (타임어택용)
+  
+  // 타이밍
+  submittedAt DateTime @default(now())
+  
+  // 관계
+  round GameRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  user  User      @relation(fields: [userId], references: [id])
+  
+  @@unique([roundId, userId])
+  @@map("round_submissions")
+}
+
+enum GameStatus {
+  WAITING
+  PLAYING
+  FINISHED
+  CANCELLED
+}
+
+// backend/.env.example
+DATABASE_URL="postgresql://username:password@localhost:5432/georush"
+JWT_SECRET="your-super-secret-jwt-key"
+REDIS_URL="redis://localhost:6379"
+CLIENT_URL="http://localhost:3000"
+PORT=5000
+
+# Mapillary API (무료)
+MAPILLARY_CLIENT_ID="your-mapillary-client-id"
